@@ -53,7 +53,9 @@ function AnimatedCounter({
           const animate = (now: number) => {
             const progress = Math.min((now - start) / duration, 1);
             const eased = 1 - Math.pow(1 - progress, 3);
-            el.textContent = `${prefix}${Math.round(eased * target)}${suffix}`;
+            const value = eased * target;
+            const display = target % 1 === 0 ? Math.round(value).toString() : value.toFixed(2);
+            el.textContent = `${prefix}${display}${suffix}`;
             if (progress < 1) requestAnimationFrame(animate);
           };
           requestAnimationFrame(animate);
@@ -902,7 +904,7 @@ export default function LandingPage() {
                     For single-location businesses
                   </p>
                   <div className="flex items-baseline gap-1 mb-8">
-                    <AnimatedCounter target={29} prefix="$" className="text-5xl font-bold tracking-tight" />
+                    <AnimatedCounter target={14.99} prefix="$" className="text-5xl font-bold tracking-tight" />
                     <span className="text-muted-foreground">/mo</span>
                   </div>
                   <ul className="space-y-3 mb-8 flex-1">
@@ -957,7 +959,7 @@ export default function LandingPage() {
                     For multi-location businesses
                   </p>
                   <div className="flex items-baseline gap-1 mb-8">
-                    <AnimatedCounter target={59} prefix="$" className="text-5xl font-bold tracking-tight text-gradient-brand" />
+                    <AnimatedCounter target={24.99} prefix="$" className="text-5xl font-bold tracking-tight text-gradient-brand" />
                     <span className="text-muted-foreground">/mo</span>
                   </div>
                   <ul className="space-y-3 mb-8 flex-1">
