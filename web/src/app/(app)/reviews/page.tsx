@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Star } from "lucide-react";
+import { ChevronRight, MessageSquare, Star } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { fetchAPI } from "@/lib/api";
@@ -36,19 +36,12 @@ function formatDate(dateStr: string): string {
 }
 
 function StarRating({ rating }: { rating: number }) {
-  const color =
-    rating <= 2
-      ? "text-red-500"
-      : rating === 3
-        ? "text-yellow-500"
-        : "text-green-500";
-
   return (
     <div className="flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map((i) => (
         <Star
           key={i}
-          className={`size-4 ${i <= rating ? color : "text-gray-300"}`}
+          className={`size-4 ${i <= rating ? "text-amber-400" : "text-muted-foreground/30"}`}
           fill={i <= rating ? "currentColor" : "none"}
         />
       ))}
@@ -56,26 +49,21 @@ function StarRating({ rating }: { rating: number }) {
   );
 }
 
-function sentimentVariant(label: string) {
-  switch (label) {
-    case "positive":
-      return "default" as const;
-    case "negative":
-      return "destructive" as const;
-    default:
-      return "secondary" as const;
-  }
-}
-
 function sentimentColor(label: string) {
   switch (label) {
     case "positive":
-      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+      return "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300";
     case "negative":
-      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
+      return "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300";
     default:
-      return "";
+      return "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300";
   }
+}
+
+function ratingBorderColor(rating: number) {
+  if (rating >= 4) return "border-l-2 border-l-green-500";
+  if (rating === 3) return "border-l-2 border-l-amber-500";
+  return "border-l-2 border-l-red-500";
 }
 
 export default function ReviewsPage() {
@@ -127,91 +115,106 @@ export default function ReviewsPage() {
       : reviews.filter((r) => r.rating === ratingFilter);
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-2xl font-semibold tracking-tight">Reviews</h1>
+    <div className="space-y-6 animate-fade-in-up">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Reviews</h1>
+        {!loading && reviews.length > 0 && (
+          <p className="mt-1 text-sm text-muted-foreground">
+            {reviews.length} review{reviews.length !== 1 ? "s" : ""} across all
+            locations
+          </p>
+        )}
+      </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {loading ? (
-        <p className="text-muted-foreground">Loading...</p>
+        <div className="space-y-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="skeleton-shimmer h-24 w-full rounded-xl" />
+          ))}
+        </div>
       ) : reviews.length === 0 ? (
-        <div className="flex min-h-[400px] items-center justify-center rounded-lg border border-dashed">
-          <p className="max-w-sm text-center text-muted-foreground">
-            No reviews yet. Connect a Google Business Profile location to get
-            started.
-          </p>
+        <div className="flex min-h-[400px] flex-col items-center justify-center gap-4 rounded-2xl bg-muted/30 border border-dashed border-border/50">
+          <div className="size-16 rounded-2xl bg-brand/10 flex items-center justify-center mb-4">
+            <MessageSquare className="size-8 text-brand" />
+          </div>
+          <div className="text-center">
+            <h3 className="font-medium">No reviews yet</h3>
+            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+              Reviews will appear here once your locations start receiving them
+            </p>
+          </div>
         </div>
       ) : (
         <>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Filter by rating:</span>
+          <div className="rounded-xl bg-muted/30 p-1.5 inline-flex flex-wrap items-center gap-1">
             <button
               onClick={() => setRatingFilter(null)}
-              className={`rounded-md px-3 py-1 text-sm ${
+              className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-all ${
                 ratingFilter === null
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:text-foreground"
+                  ? "bg-brand text-white shadow-sm"
+                  : "bg-transparent text-muted-foreground hover:text-foreground hover:bg-background"
               }`}
             >
-              All
+              All ({reviews.length})
             </button>
             {[1, 2, 3, 4, 5].map((r) => (
               <button
                 key={r}
                 onClick={() => setRatingFilter(r)}
-                className={`rounded-md px-3 py-1 text-sm ${
+                className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-all ${
                   ratingFilter === r
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:text-foreground"
+                    ? "bg-brand text-white shadow-sm"
+                    : "bg-transparent text-muted-foreground hover:text-foreground hover:bg-background"
                 }`}
               >
-                {r} <Star className="mb-0.5 inline size-3" />
+                {r} ★ ({reviews.filter((rev) => rev.rating === r).length})
               </button>
             ))}
           </div>
 
-          <div className="space-y-4">
-            {filtered.map((review) => (
+          <div className="space-y-3">
+            {filtered.map((review, index) => (
               <Link
                 key={review.id}
                 href={`/reviews/${review.id}`}
-                className="block transition-colors hover:opacity-80"
+                className="block animate-fade-in-up"
+                style={{ animationDelay: `${index * 50}ms` }}
               >
-                <Card className="cursor-pointer transition-shadow hover:ring-2 hover:ring-ring/30">
-                  <CardContent className="space-y-3 pt-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="font-medium">{review.author_name}</span>
-                        <StarRating rating={review.rating} />
-                      </div>
-                      <span className="text-sm text-muted-foreground">
-                        {formatDate(review.review_time)}
-                      </span>
+                <Card
+                  className={`cursor-pointer card-hover-border card-interactive ${ratingBorderColor(review.rating)}`}
+                >
+                  <CardContent className="flex items-center gap-4">
+                    <div className="size-9 rounded-full bg-gradient-to-br from-orange-200 to-amber-200 dark:from-orange-800 dark:to-amber-800 flex items-center justify-center text-xs font-semibold text-orange-700 dark:text-orange-200 shrink-0">
+                      {review.author_name?.charAt(0)?.toUpperCase() || "?"}
                     </div>
-                    {review.text && (
-                      <p className="text-sm">{review.text}</p>
-                    )}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {review.sentiment_label && (
-                          <Badge
-                            variant={sentimentVariant(review.sentiment_label)}
-                            className={sentimentColor(review.sentiment_label)}
-                          >
-                            {review.sentiment_label}
-                          </Badge>
-                        )}
-                      </div>
-                      <span className="text-sm font-medium text-muted-foreground hover:text-foreground">
-                        View &amp; Respond
-                      </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium">{review.author_name}</p>
+                      <StarRating rating={review.rating} />
+                      {review.text && (
+                        <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
+                          {review.text}
+                        </p>
+                      )}
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {formatDate(review.review_time)}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      {review.sentiment_label && (
+                        <Badge className={sentimentColor(review.sentiment_label)}>
+                          {review.sentiment_label}
+                        </Badge>
+                      )}
+                      <ChevronRight className="size-4 text-muted-foreground" />
                     </div>
                   </CardContent>
                 </Card>
               </Link>
             ))}
             {filtered.length === 0 && (
-              <p className="text-center text-sm text-muted-foreground">
+              <p className="py-8 text-center text-sm text-muted-foreground">
                 No reviews match the selected filter.
               </p>
             )}

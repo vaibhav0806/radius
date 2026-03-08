@@ -2,12 +2,32 @@
 
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
-import { ArrowLeft, RefreshCw, Star } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ArrowLeft,
+  AlertCircle,
+  CheckCircle,
+  RefreshCw,
+  Sparkles,
+  Star,
+} from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
 import { fetchAPI } from "@/lib/api";
 
 interface Review {
@@ -45,73 +65,35 @@ function formatDate(dateStr: string): string {
   });
 }
 
-function StarRating({ rating }: { rating: number }) {
-  const color =
-    rating <= 2
-      ? "text-red-500"
-      : rating === 3
-        ? "text-yellow-500"
-        : "text-green-500";
-
-  return (
-    <div className="flex items-center gap-0.5">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <Star
-          key={i}
-          className={`size-4 ${i <= rating ? color : "text-gray-300"}`}
-          fill={i <= rating ? "currentColor" : "none"}
-        />
-      ))}
-    </div>
-  );
-}
-
-function sentimentVariant(label: string) {
-  switch (label) {
-    case "positive":
-      return "default" as const;
-    case "negative":
-      return "destructive" as const;
-    default:
-      return "secondary" as const;
-  }
-}
-
 function sentimentColor(label: string) {
   switch (label) {
     case "positive":
-      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+      return "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300";
     case "negative":
-      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
+      return "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300";
     default:
-      return "";
+      return "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300";
   }
 }
 
-function statusVariant(status: string) {
+function statusBadge(status: string) {
   switch (status) {
     case "sent":
-      return "default" as const;
-    case "approved":
-      return "default" as const;
+      return "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300";
     case "skipped":
-      return "secondary" as const;
+      return "bg-muted text-muted-foreground";
     default:
-      return "outline" as const;
+      return "bg-secondary text-secondary-foreground";
   }
 }
 
-function statusColor(status: string) {
-  switch (status) {
-    case "sent":
-      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
-    case "approved":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
-    case "skipped":
-      return "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400";
-    default:
-      return "";
-  }
+function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 }
 
 export default function ReviewDetailPage({
@@ -277,212 +259,261 @@ export default function ReviewDetailPage({
 
   if (loading) {
     return (
-      <div className="space-y-8">
-        <Link
-          href="/reviews"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
+      <div className="space-y-6 animate-fade-in-up">
+        <Link className={cn(buttonVariants({ variant: "ghost", size: "sm" }))} href="/reviews">
           <ArrowLeft className="size-4" />
           Back to Reviews
         </Link>
-        <p className="text-muted-foreground">Loading...</p>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="skeleton-shimmer h-64 w-full rounded-xl" />
+          <div className="skeleton-shimmer h-64 w-full rounded-xl" />
+        </div>
       </div>
     );
   }
 
   if (!review) {
     return (
-      <div className="space-y-8">
-        <Link
-          href="/reviews"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
+      <div className="space-y-6 animate-fade-in-up">
+        <Link className={cn(buttonVariants({ variant: "ghost", size: "sm" }))} href="/reviews">
           <ArrowLeft className="size-4" />
           Back to Reviews
         </Link>
-        <p className="text-sm text-destructive">{error || "Review not found"}</p>
+        <p className="flex items-center gap-2 text-sm text-destructive">
+          <AlertCircle className="size-4" />
+          {error || "Review not found"}
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <Link
-        href="/reviews"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
+    <div className="space-y-6 animate-fade-in-up">
+      <Link className={cn(buttonVariants({ variant: "ghost", size: "sm" }))} href="/reviews">
         <ArrowLeft className="size-4" />
         Back to Reviews
       </Link>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <p className="flex items-center gap-2 text-sm text-destructive">
+          <AlertCircle className="size-4" />
+          {error}
+        </p>
+      )}
       {successMessage && (
-        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200">
+        <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200">
+          <CheckCircle className="size-4 shrink-0" />
           {successMessage}
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Review details */}
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Review</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="font-medium">{review.author_name}</span>
-                  <StarRating rating={review.rating} />
-                </div>
-                <span className="text-sm text-muted-foreground">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Left column - Review Card */}
+        <Card className="card-hover-border">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <Avatar>
+                <AvatarFallback className="bg-gradient-to-br from-orange-200 to-amber-200 dark:from-orange-800 dark:to-amber-800 text-orange-700 dark:text-orange-200">
+                  {getInitials(review.author_name)}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="font-semibold">{review.author_name}</p>
+                <p className="text-xs text-muted-foreground">
                   {formatDate(review.review_time)}
-                </span>
+                </p>
               </div>
-              {review.text && <p className="text-sm">{review.text}</p>}
-              {review.sentiment_label && (
-                <Badge
-                  variant={sentimentVariant(review.sentiment_label)}
-                  className={sentimentColor(review.sentiment_label)}
-                >
-                  {review.sentiment_label}
-                </Badge>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-0.5">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <Star
+                  key={i}
+                  className={`size-5 ${i <= review.rating ? "text-amber-400" : "text-muted-foreground/30"}`}
+                  fill={i <= review.rating ? "currentColor" : "none"}
+                />
+              ))}
+            </div>
+            <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+            {review.text && (
+              <p className="text-sm leading-relaxed">{review.text}</p>
+            )}
+            {review.sentiment_label && (
+              <Badge className={sentimentColor(review.sentiment_label)}>
+                {review.sentiment_label}
+              </Badge>
+            )}
+          </CardContent>
+        </Card>
 
-        {/* Response editor */}
-        <div className="lg:col-span-1">
-          <Card>
-            <CardHeader>
-              <CardTitle>Response</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {!response ? (
-                <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    No AI response generated yet.
-                  </p>
-                  <Button
-                    onClick={handleRegenerate}
-                    disabled={actionLoading === "regenerate"}
-                  >
-                    {actionLoading === "regenerate"
-                      ? "Generating..."
-                      : "Generate Response"}
-                  </Button>
+        {/* Right column - Response Editor Card */}
+        <Card className="card-hover-border">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="size-4 text-brand" />
+              AI Response
+            </CardTitle>
+            {response && (
+              <CardAction>
+                <Badge className={statusBadge(response.status)}>
+                  {response.status}
+                </Badge>
+              </CardAction>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!response && actionLoading !== "regenerate" ? (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  No AI response generated yet.
+                </p>
+                <Button
+                  className="rounded-full btn-shimmer"
+                  onClick={handleRegenerate}
+                  disabled={actionLoading === "regenerate"}
+                >
+                  Generate Response
+                </Button>
+              </div>
+            ) : !response && actionLoading === "regenerate" ? (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Generating response...
+                </p>
+                <Button disabled>Generating...</Button>
+              </div>
+            ) : isSent ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800 dark:bg-green-950 dark:text-green-200">
+                  <CheckCircle className="size-4 shrink-0" />
+                  Response published
                 </div>
-              ) : isSent ? (
-                <div className="space-y-3">
-                  <Badge
-                    variant={statusVariant("sent")}
-                    className={statusColor("sent")}
-                  >
-                    Published
-                  </Badge>
-                  <p className="whitespace-pre-wrap text-sm">
-                    {response.draft_text}
-                  </p>
+                <div className="whitespace-pre-wrap rounded-lg bg-muted/50 p-4 text-sm">
+                  {response.draft_text}
                 </div>
-              ) : isSkipped ? (
-                <div className="space-y-3">
-                  <Badge
-                    variant={statusVariant("skipped")}
-                    className={statusColor("skipped")}
-                  >
-                    Skipped
-                  </Badge>
-                  <p className="text-sm text-muted-foreground">
-                    This review was skipped.
-                  </p>
+              </div>
+            ) : isSkipped ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
+                  This review was skipped
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  <Badge
-                    variant={statusVariant(response.status)}
-                    className={statusColor(response.status)}
-                  >
-                    {response.status}
-                  </Badge>
-                  <div className="space-y-2">
-                    <Label htmlFor="draft-text">Draft</Label>
-                    <Textarea
-                      id="draft-text"
-                      value={draftText}
-                      onChange={(e) => setDraftText(e.target.value)}
-                      rows={6}
-                    />
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {isDraftModified && (
+                <Collapsible
+                  open={showInstructions}
+                  onOpenChange={setShowInstructions}
+                >
+                  <CollapsibleTrigger className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium transition-all hover:bg-muted hover:text-foreground">
+                    <RefreshCw className="size-4" />
+                    Regenerate
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="mt-3 space-y-3">
+                      <Textarea
+                        placeholder="Optional: extra instructions for regeneration"
+                        value={extraInstructions}
+                        onChange={(e) => setExtraInstructions(e.target.value)}
+                        rows={2}
+                      />
                       <Button
+                        className="rounded-full"
                         variant="outline"
-                        onClick={handleSaveEdit}
-                        disabled={actionLoading === "save"}
+                        size="sm"
+                        onClick={handleRegenerate}
+                        disabled={actionLoading === "regenerate"}
                       >
-                        {actionLoading === "save" ? "Saving..." : "Save Edit"}
+                        {actionLoading === "regenerate"
+                          ? "Regenerating..."
+                          : "Regenerate"}
                       </Button>
-                    )}
-                    {isDraft && (
-                      <>
-                        <Button
-                          onClick={handleApprove}
-                          disabled={!!actionLoading}
-                        >
-                          {actionLoading === "approve"
-                            ? "Publishing..."
-                            : "Approve & Publish"}
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          onClick={handleSkip}
-                          disabled={!!actionLoading}
-                        >
-                          {actionLoading === "skip" ? "Skipping..." : "Skip"}
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                  {isDraft && (
-                    <div className="space-y-2 border-t pt-3">
-                      <button
-                        type="button"
-                        onClick={() => setShowInstructions(!showInstructions)}
-                        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-                      >
-                        <RefreshCw className="size-3" />
-                        Regenerate
-                      </button>
-                      {showInstructions && (
-                        <div className="space-y-2">
-                          <Textarea
-                            placeholder="Optional: extra instructions for regeneration"
-                            value={extraInstructions}
-                            onChange={(e) =>
-                              setExtraInstructions(e.target.value)
-                            }
-                            rows={2}
-                          />
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleRegenerate}
-                            disabled={actionLoading === "regenerate"}
-                          >
-                            {actionLoading === "regenerate"
-                              ? "Regenerating..."
-                              : "Regenerate"}
-                          </Button>
-                        </div>
-                      )}
                     </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
+            ) : (
+              <>
+                <Textarea
+                  id="draft-text"
+                  value={draftText}
+                  onChange={(e) => setDraftText(e.target.value)}
+                  className="min-h-[200px]"
+                  rows={8}
+                />
+              </>
+            )}
+          </CardContent>
+          {isDraft && response && (
+            <CardFooter className="flex-col gap-3">
+              <div className="flex w-full items-center justify-between">
+                <div>
+                  {isDraftModified && (
+                    <Button
+                      className="rounded-full"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSaveEdit}
+                      disabled={actionLoading === "save"}
+                    >
+                      {actionLoading === "save" ? "Saving..." : "Save Edit"}
+                    </Button>
                   )}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    className="rounded-full btn-shimmer"
+                    onClick={handleApprove}
+                    disabled={!!actionLoading}
+                    size="sm"
+                  >
+                    {actionLoading === "approve"
+                      ? "Publishing..."
+                      : "Approve & Publish"}
+                  </Button>
+                  <Button
+                    className="rounded-full"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleSkip}
+                    disabled={!!actionLoading}
+                  >
+                    {actionLoading === "skip" ? "Skipping..." : "Skip"}
+                  </Button>
+                </div>
+              </div>
+              <div className="w-full">
+                <Collapsible
+                  open={showInstructions}
+                  onOpenChange={setShowInstructions}
+                >
+                  <CollapsibleTrigger className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium transition-all hover:bg-muted hover:text-foreground">
+                    <RefreshCw className="size-4" />
+                    Regenerate
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="mt-3 space-y-3">
+                      <Textarea
+                        placeholder="Optional: extra instructions for regeneration"
+                        value={extraInstructions}
+                        onChange={(e) => setExtraInstructions(e.target.value)}
+                        rows={2}
+                      />
+                      <Button
+                        className="rounded-full"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRegenerate}
+                        disabled={actionLoading === "regenerate"}
+                      >
+                        {actionLoading === "regenerate"
+                          ? "Regenerating..."
+                          : "Regenerate"}
+                      </Button>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
+            </CardFooter>
+          )}
+        </Card>
       </div>
     </div>
   );

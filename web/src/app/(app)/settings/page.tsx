@@ -2,12 +2,33 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Plus, X } from "lucide-react";
+import { Plus, X, CheckCircle, CircleCheck, Info, Building2, Mic, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { fetchAPI } from "@/lib/api";
 
 interface Business {
@@ -51,6 +72,8 @@ export default function SettingsPage() {
   const [examples, setExamples] = useState<string[]>([""]);
   const [savingVoice, setSavingVoice] = useState(false);
   const [voiceSuccess, setVoiceSuccess] = useState("");
+
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
   useEffect(() => {
     loadBusinesses();
@@ -117,7 +140,6 @@ export default function SettingsPage() {
 
   async function handleCancel() {
     if (businesses.length === 0) return;
-    if (!window.confirm("Are you sure you want to cancel your subscription?")) return;
     try {
       setBillingAction(true);
       setError("");
@@ -130,6 +152,7 @@ export default function SettingsPage() {
       setError(err instanceof Error ? err.message : "Failed to cancel subscription");
     } finally {
       setBillingAction(false);
+      setCancelDialogOpen(false);
     }
   }
 
@@ -194,220 +217,292 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+    <div className="space-y-8 animate-fade-in-up">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Manage your business, brand voice, and billing
+        </p>
+      </div>
 
       {billingResult === "success" && (
-        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200">
-          Subscription activated!
-        </div>
+        <Alert className="border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200">
+          <CircleCheck className="size-4" />
+          <AlertTitle>Subscription activated!</AlertTitle>
+        </Alert>
       )}
 
       {billingResult === "cancel" && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200">
-          Checkout was cancelled.
-        </div>
+        <Alert className="border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200">
+          <Info className="size-4" />
+          <AlertTitle>Checkout was cancelled.</AlertTitle>
+        </Alert>
       )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Business Profile</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <p className="text-sm text-muted-foreground">Loading...</p>
-            ) : businesses.length > 0 ? (
-              <div className="space-y-2">
-                <div>
-                  <span className="text-sm font-medium">Name: </span>
-                  <span className="text-sm text-muted-foreground">
-                    {businesses[0].name}
-                  </span>
+      <Tabs defaultValue="business">
+        <TabsList className="bg-muted/30 p-1">
+          <TabsTrigger value="business">Business</TabsTrigger>
+          <TabsTrigger value="brand-voice">Brand Voice</TabsTrigger>
+          <TabsTrigger value="billing">Billing</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="business">
+          <Card className="card-hover-border">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="size-4 text-brand" />
+                Business Profile
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="space-y-3">
+                  <div className="skeleton-shimmer h-4 w-48 rounded" />
+                  <div className="skeleton-shimmer h-4 w-32 rounded" />
                 </div>
-                <div>
-                  <span className="text-sm font-medium">Type: </span>
-                  <span className="text-sm capitalize text-muted-foreground">
-                    {businesses[0].type}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <form className="space-y-4" onSubmit={handleCreate}>
-                <div className="space-y-2">
-                  <Label htmlFor="biz-name">Business Name</Label>
-                  <Input
-                    id="biz-name"
-                    type="text"
-                    placeholder="My Business"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="biz-type">Business Type</Label>
-                  <select
-                    id="biz-type"
-                    value={type}
-                    onChange={(e) => setType(e.target.value)}
-                    className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                  >
-                    <option value="restaurant">Restaurant</option>
-                    <option value="clinic">Clinic</option>
-                    <option value="salon">Salon</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-                <Button disabled={creating}>
-                  {creating ? "Creating..." : "Create Business"}
-                </Button>
-              </form>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Brand Voice</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <p className="text-sm text-muted-foreground">Loading...</p>
-            ) : businesses.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Create a business first to configure brand voice.
-              </p>
-            ) : (
-              <form className="space-y-4" onSubmit={handleSaveVoice}>
-                <div className="space-y-2">
-                  <Label htmlFor="tone">Tone</Label>
-                  <Textarea
-                    id="tone"
-                    placeholder="e.g., Warm and friendly, professional but not stuffy"
-                    value={tone}
-                    onChange={(e) => setTone(e.target.value)}
-                    rows={2}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="business-context">Business Context</Label>
-                  <Textarea
-                    id="business-context"
-                    placeholder="e.g., Family-owned Italian restaurant since 1985. Known for handmade pasta."
-                    value={businessContext}
-                    onChange={(e) => setBusinessContext(e.target.value)}
-                    rows={3}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="rules">Rules</Label>
-                  <Textarea
-                    id="rules"
-                    placeholder="e.g., Never mention competitor restaurants. Don't offer discounts."
-                    value={rules}
-                    onChange={(e) => setRules(e.target.value)}
-                    rows={3}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Example Responses</Label>
-                  <div className="space-y-3">
-                    {examples.map((example, index) => (
-                      <div key={index} className="flex items-start gap-2">
-                        <Textarea
-                          placeholder={`Example response ${index + 1}`}
-                          value={example}
-                          onChange={(e) => updateExample(index, e.target.value)}
-                          rows={2}
-                          className="flex-1"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeExample(index)}
-                          className="mt-2 text-muted-foreground transition-colors hover:text-destructive"
-                          disabled={examples.length === 1}
-                        >
-                          <X className="size-4" />
-                        </button>
-                      </div>
-                    ))}
+              ) : businesses.length > 0 ? (
+                <dl className="space-y-3">
+                  <div>
+                    <dt className="text-sm font-medium">Name</dt>
+                    <dd className="text-sm text-muted-foreground">
+                      {businesses[0].name}
+                    </dd>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={addExample}
-                  >
-                    <Plus className="size-4" />
-                    Add example
+                  <div>
+                    <dt className="text-sm font-medium">Type</dt>
+                    <dd className="text-sm capitalize text-muted-foreground">
+                      {businesses[0].type}
+                    </dd>
+                  </div>
+                </dl>
+              ) : (
+                <form className="space-y-4" onSubmit={handleCreate}>
+                  <div className="space-y-2">
+                    <Label htmlFor="biz-name">Business Name</Label>
+                    <Input
+                      id="biz-name"
+                      type="text"
+                      placeholder="My Business"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Business Type</Label>
+                    <Select value={type} onValueChange={(v) => { if (v) setType(v); }}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select a type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="restaurant">Restaurant</SelectItem>
+                        <SelectItem value="clinic">Clinic</SelectItem>
+                        <SelectItem value="salon">Salon</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button type="submit" className="rounded-full btn-shimmer" disabled={creating}>
+                    {creating ? "Creating..." : "Create Business"}
+                  </Button>
+                </form>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="brand-voice">
+          <Card className="card-hover-border">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mic className="size-4 text-brand" />
+                Brand Voice
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="space-y-4">
+                  <div className="skeleton-shimmer h-4 w-24 rounded" />
+                  <div className="skeleton-shimmer h-16 w-full rounded" />
+                  <div className="skeleton-shimmer h-4 w-32 rounded" />
+                  <div className="skeleton-shimmer h-20 w-full rounded" />
+                </div>
+              ) : businesses.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Create a business first to configure brand voice.
+                </p>
+              ) : (
+                <form className="space-y-6" onSubmit={handleSaveVoice}>
+                  <div className="space-y-2">
+                    <Label htmlFor="tone">Tone</Label>
+                    <Textarea
+                      id="tone"
+                      placeholder="e.g., Warm and friendly, professional but not stuffy"
+                      value={tone}
+                      onChange={(e) => setTone(e.target.value)}
+                      rows={2}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="business-context">Business Context</Label>
+                    <Textarea
+                      id="business-context"
+                      placeholder="e.g., Family-owned Italian restaurant since 1985. Known for handmade pasta."
+                      value={businessContext}
+                      onChange={(e) => setBusinessContext(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="rules">Rules</Label>
+                    <Textarea
+                      id="rules"
+                      placeholder="e.g., Never mention competitor restaurants. Don't offer discounts."
+                      value={rules}
+                      onChange={(e) => setRules(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                  <div className="space-y-3">
+                    <Label>Example Responses</Label>
+                    <div className="space-y-3">
+                      {examples.map((example, index) => (
+                        <div key={index} className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-muted-foreground">
+                              Example {index + 1}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-xs"
+                              onClick={() => removeExample(index)}
+                              disabled={examples.length === 1}
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <X className="size-3" />
+                            </Button>
+                          </div>
+                          <Textarea
+                            placeholder={`Example response ${index + 1}`}
+                            value={example}
+                            onChange={(e) => updateExample(index, e.target.value)}
+                            rows={2}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={addExample}
+                    >
+                      <Plus className="size-4" />
+                      Add example
+                    </Button>
+                  </div>
+                  {voiceSuccess && (
+                    <p className="flex items-center gap-1.5 text-sm text-brand">
+                      <CheckCircle className="size-4" />
+                      {voiceSuccess}
+                    </p>
+                  )}
+                  <Button type="submit" className="rounded-full btn-shimmer" disabled={savingVoice}>
+                    {savingVoice ? "Saving..." : "Save Brand Voice"}
+                  </Button>
+                </form>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="billing">
+          <Card className="card-hover-border">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="size-4 text-brand" />
+                Billing
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading || billingLoading ? (
+                <div className="space-y-3">
+                  <div className="skeleton-shimmer h-4 w-40 rounded" />
+                  <div className="skeleton-shimmer h-4 w-56 rounded" />
+                  <div className="skeleton-shimmer h-8 w-36 rounded" />
+                </div>
+              ) : businesses.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Create a business first to manage billing.
+                </p>
+              ) : billingStatus?.status === "active" ? (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Status:</span>
+                      <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                        Active
+                      </Badge>
+                    </div>
+                    {billingStatus.current_period_end && (
+                      <div>
+                        <span className="text-sm font-medium">
+                          Current period ends:{" "}
+                        </span>
+                        <span className="text-sm text-muted-foreground">
+                          {new Date(billingStatus.current_period_end).toLocaleDateString()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+                    <AlertDialogTrigger
+                      render={
+                        <Button variant="destructive" className="rounded-full" disabled={billingAction}>
+                          {billingAction ? "Cancelling..." : "Cancel Subscription"}
+                        </Button>
+                      }
+                    />
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will cancel your subscription. You will lose access
+                          to premium features at the end of the current billing
+                          period.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          variant="destructive"
+                          onClick={handleCancel}
+                          disabled={billingAction}
+                        >
+                          {billingAction ? "Cancelling..." : "Confirm"}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    No active subscription
+                  </p>
+                  <Button className="rounded-full btn-shimmer" onClick={handleUpgrade} disabled={billingAction}>
+                    {billingAction ? "Redirecting..." : "Upgrade"}
                   </Button>
                 </div>
-                {voiceSuccess && (
-                  <p className="text-sm text-green-600 dark:text-green-400">
-                    {voiceSuccess}
-                  </p>
-                )}
-                <Button disabled={savingVoice}>
-                  {savingVoice ? "Saving..." : "Save Brand Voice"}
-                </Button>
-              </form>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Billing</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading || billingLoading ? (
-              <p className="text-sm text-muted-foreground">Loading...</p>
-            ) : businesses.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Create a business first to manage billing.
-              </p>
-            ) : billingStatus?.status === "active" ? (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <div>
-                    <span className="text-sm font-medium">Status: </span>
-                    <span className="text-sm text-green-600 dark:text-green-400">
-                      Active subscription
-                    </span>
-                  </div>
-                  {billingStatus.current_period_end && (
-                    <div>
-                      <span className="text-sm font-medium">
-                        Current period ends:{" "}
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        {new Date(billingStatus.current_period_end).toLocaleDateString()}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <Button
-                  variant="destructive"
-                  onClick={handleCancel}
-                  disabled={billingAction}
-                >
-                  {billingAction ? "Cancelling..." : "Cancel Subscription"}
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  No active subscription
-                </p>
-                <Button onClick={handleUpgrade} disabled={billingAction}>
-                  {billingAction ? "Redirecting..." : "Upgrade"}
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
