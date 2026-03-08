@@ -4,14 +4,13 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/vaibhav/review-responder/internal/billing"
 	"github.com/vaibhav/review-responder/internal/middleware"
 )
 
 func (h *Handler) BillingCheckout(w http.ResponseWriter, r *http.Request) {
-	if h.Cfg.StripeSecretKey == "" || h.Cfg.StripePriceID == "" {
+	if h.Cfg.DodoPaymentsAPIKey == "" || h.Cfg.DodoPaymentsProductID == "" {
 		writeError(w, http.StatusServiceUnavailable, "billing is not configured")
 		return
 	}
@@ -30,62 +29,51 @@ func (h *Handler) BillingCheckout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var stripeCustomerID *string
+	// Verify business ownership
+	var bizID string
 	err := h.DB.QueryRow(r.Context(),
-		"SELECT stripe_customer_id FROM businesses WHERE id = $1 AND owner_user_id = $2",
+		"SELECT id FROM businesses WHERE id = $1 AND owner_user_id = $2",
 		req.BusinessID, userID,
-	).Scan(&stripeCustomerID)
+	).Scan(&bizID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "business not found")
 		return
 	}
 
-	client := billing.NewClient(h.Cfg.StripeSecretKey)
-
-	if stripeCustomerID == nil || *stripeCustomerID == "" {
-		var email, name string
-		err := h.DB.QueryRow(r.Context(),
-			"SELECT email, name FROM users WHERE id = $1", userID,
-		).Scan(&email, &name)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal server error")
-			return
-		}
-
-		cust, err := client.CreateCustomer(r.Context(), email, name)
-		if err != nil {
-			writeError(w, http.StatusBadGateway, "failed to create stripe customer")
-			return
-		}
-
-		_, err = h.DB.Exec(r.Context(),
-			"UPDATE businesses SET stripe_customer_id = $1 WHERE id = $2",
-			cust.ID, req.BusinessID,
-		)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal server error")
-			return
-		}
-		stripeCustomerID = &cust.ID
+	// Get user email and name for checkout
+	var email, name string
+	err = h.DB.QueryRow(r.Context(),
+		"SELECT email, name FROM users WHERE id = $1", userID,
+	).Scan(&email, &name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
 	}
 
-	session, err := client.CreateCheckoutSession(
-		r.Context(),
-		*stripeCustomerID,
-		h.Cfg.StripePriceID,
-		h.Cfg.BaseURL+"/settings?billing=success",
-		h.Cfg.BaseURL+"/settings?billing=cancel",
-	)
+	client := billing.NewClient(h.Cfg.DodoPaymentsAPIKey, h.Cfg.DodoPaymentsEnvironment)
+	session, err := client.CreateCheckoutSession(r.Context(), &billing.CheckoutRequest{
+		ProductCart: []billing.CartItem{
+			{ProductID: h.Cfg.DodoPaymentsProductID, Quantity: 1},
+		},
+		Customer: billing.CustomerInfo{
+			Email: email,
+			Name:  name,
+		},
+		ReturnURL: h.Cfg.BaseURL + "/settings?billing=success",
+		Metadata: map[string]any{
+			"business_id": req.BusinessID,
+		},
+	})
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to create checkout session")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"url": session.URL})
+	writeJSON(w, http.StatusOK, map[string]string{"url": session.CheckoutURL})
 }
 
 func (h *Handler) BillingStatus(w http.ResponseWriter, r *http.Request) {
-	if h.Cfg.StripeSecretKey == "" {
+	if h.Cfg.DodoPaymentsAPIKey == "" {
 		writeError(w, http.StatusServiceUnavailable, "billing is not configured")
 		return
 	}
@@ -98,11 +86,11 @@ func (h *Handler) BillingStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var subscriptionStatus string
-	var stripeSubscriptionID *string
+	var dodoSubscriptionID *string
 	err := h.DB.QueryRow(r.Context(),
-		"SELECT subscription_status, stripe_subscription_id FROM businesses WHERE id = $1 AND owner_user_id = $2",
+		"SELECT subscription_status, dodo_subscription_id FROM businesses WHERE id = $1 AND owner_user_id = $2",
 		businessID, userID,
-	).Scan(&subscriptionStatus, &stripeSubscriptionID)
+	).Scan(&subscriptionStatus, &dodoSubscriptionID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "business not found")
 		return
@@ -113,13 +101,13 @@ func (h *Handler) BillingStatus(w http.ResponseWriter, r *http.Request) {
 		"cancel_at_period_end": false,
 	}
 
-	if stripeSubscriptionID != nil && *stripeSubscriptionID != "" {
-		client := billing.NewClient(h.Cfg.StripeSecretKey)
-		sub, err := client.GetSubscription(r.Context(), *stripeSubscriptionID)
+	if dodoSubscriptionID != nil && *dodoSubscriptionID != "" {
+		client := billing.NewClient(h.Cfg.DodoPaymentsAPIKey, h.Cfg.DodoPaymentsEnvironment)
+		sub, err := client.GetSubscription(r.Context(), *dodoSubscriptionID)
 		if err == nil {
 			resp["status"] = sub.Status
-			resp["current_period_end"] = time.Unix(sub.CurrentPeriodEnd, 0).Format(time.RFC3339)
-			resp["cancel_at_period_end"] = sub.CancelAtPeriodEnd
+			resp["next_billing_date"] = sub.NextBillingDate
+			resp["cancel_at_period_end"] = sub.CancelAtNextBillingDate
 		}
 	}
 
@@ -127,7 +115,7 @@ func (h *Handler) BillingStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) BillingCancel(w http.ResponseWriter, r *http.Request) {
-	if h.Cfg.StripeSecretKey == "" {
+	if h.Cfg.DodoPaymentsAPIKey == "" {
 		writeError(w, http.StatusServiceUnavailable, "billing is not configured")
 		return
 	}
@@ -146,28 +134,28 @@ func (h *Handler) BillingCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var stripeSubscriptionID *string
+	var dodoSubscriptionID *string
 	err := h.DB.QueryRow(r.Context(),
-		"SELECT stripe_subscription_id FROM businesses WHERE id = $1 AND owner_user_id = $2",
+		"SELECT dodo_subscription_id FROM businesses WHERE id = $1 AND owner_user_id = $2",
 		req.BusinessID, userID,
-	).Scan(&stripeSubscriptionID)
+	).Scan(&dodoSubscriptionID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "business not found")
 		return
 	}
 
-	if stripeSubscriptionID == nil || *stripeSubscriptionID == "" {
+	if dodoSubscriptionID == nil || *dodoSubscriptionID == "" {
 		writeError(w, http.StatusBadRequest, "no active subscription")
 		return
 	}
 
-	client := billing.NewClient(h.Cfg.StripeSecretKey)
-	if err := client.CancelSubscription(r.Context(), *stripeSubscriptionID); err != nil {
+	client := billing.NewClient(h.Cfg.DodoPaymentsAPIKey, h.Cfg.DodoPaymentsEnvironment)
+	if err := client.CancelSubscription(r.Context(), *dodoSubscriptionID); err != nil {
 		writeError(w, http.StatusBadGateway, "failed to cancel subscription")
 		return
 	}
 
-	sub, err := client.GetSubscription(r.Context(), *stripeSubscriptionID)
+	sub, err := client.GetSubscription(r.Context(), *dodoSubscriptionID)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "failed to fetch subscription status")
 		return
@@ -175,13 +163,13 @@ func (h *Handler) BillingCancel(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":              sub.Status,
-		"current_period_end":   time.Unix(sub.CurrentPeriodEnd, 0).Format(time.RFC3339),
-		"cancel_at_period_end": sub.CancelAtPeriodEnd,
+		"next_billing_date":   sub.NextBillingDate,
+		"cancel_at_period_end": sub.CancelAtNextBillingDate,
 	})
 }
 
 func (h *Handler) BillingWebhook(w http.ResponseWriter, r *http.Request) {
-	if h.Cfg.StripeWebhookSecret == "" {
+	if h.Cfg.DodoPaymentsWebhookSecret == "" {
 		writeError(w, http.StatusServiceUnavailable, "billing webhooks not configured")
 		return
 	}
@@ -192,8 +180,13 @@ func (h *Handler) BillingWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sigHeader := r.Header.Get("Stripe-Signature")
-	if err := billing.VerifyWebhookSignature(body, sigHeader, h.Cfg.StripeWebhookSecret); err != nil {
+	if err := billing.VerifyWebhookSignature(
+		body,
+		r.Header.Get("webhook-id"),
+		r.Header.Get("webhook-timestamp"),
+		r.Header.Get("webhook-signature"),
+		h.Cfg.DodoPaymentsWebhookSecret,
+	); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid signature")
 		return
 	}
@@ -207,67 +200,57 @@ func (h *Handler) BillingWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var obj struct {
-		Object json.RawMessage `json:"object"`
+	var payload struct {
+		SubscriptionID string         `json:"subscription_id"`
+		Status         string         `json:"status"`
+		Customer       struct {
+			CustomerID string `json:"customer_id"`
+		} `json:"customer"`
+		Metadata map[string]any `json:"metadata"`
 	}
-	if err := json.Unmarshal(event.Data, &obj); err != nil {
+	if err := json.Unmarshal(event.Data, &payload); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid event data")
 		return
 	}
 
 	switch event.Type {
-	case "checkout.session.completed":
-		var session struct {
-			Customer     string `json:"customer"`
-			Subscription string `json:"subscription"`
-		}
-		if err := json.Unmarshal(obj.Object, &session); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid session data")
-			return
-		}
-		_, err = h.DB.Exec(r.Context(),
-			"UPDATE businesses SET stripe_subscription_id = $1, subscription_status = 'active' WHERE stripe_customer_id = $2",
-			session.Subscription, session.Customer,
-		)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal server error")
-			return
+	case "subscription.active":
+		businessID, _ := payload.Metadata["business_id"].(string)
+		if businessID != "" {
+			_, err = h.DB.Exec(r.Context(),
+				"UPDATE businesses SET dodo_subscription_id = $1, dodo_customer_id = $2, subscription_status = 'active' WHERE id = $3",
+				payload.SubscriptionID, payload.Customer.CustomerID, businessID,
+			)
+		} else {
+			// Fallback: match by dodo_customer_id
+			_, err = h.DB.Exec(r.Context(),
+				"UPDATE businesses SET dodo_subscription_id = $1, subscription_status = 'active' WHERE dodo_customer_id = $2",
+				payload.SubscriptionID, payload.Customer.CustomerID,
+			)
 		}
 
-	case "customer.subscription.updated":
-		var sub struct {
-			ID     string `json:"id"`
-			Status string `json:"status"`
-		}
-		if err := json.Unmarshal(obj.Object, &sub); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid subscription data")
-			return
-		}
+	case "subscription.cancelled", "subscription.expired":
 		_, err = h.DB.Exec(r.Context(),
-			"UPDATE businesses SET subscription_status = $1 WHERE stripe_subscription_id = $2",
-			sub.Status, sub.ID,
+			"UPDATE businesses SET subscription_status = 'inactive', dodo_subscription_id = NULL WHERE dodo_subscription_id = $1",
+			payload.SubscriptionID,
 		)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal server error")
-			return
-		}
 
-	case "customer.subscription.deleted":
-		var sub struct {
-			ID string `json:"id"`
-		}
-		if err := json.Unmarshal(obj.Object, &sub); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid subscription data")
-			return
-		}
+	case "subscription.failed", "subscription.on_hold":
 		_, err = h.DB.Exec(r.Context(),
-			"UPDATE businesses SET subscription_status = 'inactive', stripe_subscription_id = NULL WHERE stripe_subscription_id = $1",
-			sub.ID,
+			"UPDATE businesses SET subscription_status = $1 WHERE dodo_subscription_id = $2",
+			payload.Status, payload.SubscriptionID,
 		)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal server error")
-			return
-		}
+
+	case "subscription.renewed":
+		_, err = h.DB.Exec(r.Context(),
+			"UPDATE businesses SET subscription_status = 'active' WHERE dodo_subscription_id = $1",
+			payload.SubscriptionID,
+		)
+	}
+
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
 	}
 
 	w.WriteHeader(http.StatusOK)

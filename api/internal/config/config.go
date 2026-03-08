@@ -10,12 +10,13 @@ type Config struct {
 	GoogleRedirectURL  string
 	BaseURL            string
 	JWTSecret          string
-	Port                  string
-	ResendAPIKey          string
-	NotificationFromEmail string
-	StripeSecretKey       string
-	StripeWebhookSecret   string
-	StripePriceID         string
+	Port                       string
+	ResendAPIKey               string
+	NotificationFromEmail      string
+	DodoPaymentsAPIKey         string
+	DodoPaymentsWebhookSecret string
+	DodoPaymentsProductID      string
+	DodoPaymentsEnvironment    string
 }
 
 func Load() *Config {
@@ -27,12 +28,13 @@ func Load() *Config {
 		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/api/google/callback"),
 		BaseURL:            getEnv("BASE_URL", "http://localhost:3000"),
 		JWTSecret:          getEnv("JWT_SECRET", "dev-secret-change-me"),
-		Port:                  getEnv("PORT", "8080"),
-		ResendAPIKey:          getEnv("RESEND_API_KEY", ""),
-		NotificationFromEmail: getEnv("NOTIFICATION_FROM_EMAIL", "notifications@reviewflow.app"),
-		StripeSecretKey:       getEnv("STRIPE_SECRET_KEY", ""),
-		StripeWebhookSecret:   getEnv("STRIPE_WEBHOOK_SECRET", ""),
-		StripePriceID:         getEnv("STRIPE_PRICE_ID", ""),
+		Port:                       getEnv("PORT", "8080"),
+		ResendAPIKey:               getEnv("RESEND_API_KEY", ""),
+		NotificationFromEmail:      getEnv("NOTIFICATION_FROM_EMAIL", "notifications@reviewflow.app"),
+		DodoPaymentsAPIKey:         getEnv("DODO_PAYMENTS_API_KEY", ""),
+		DodoPaymentsWebhookSecret: getEnv("DODO_PAYMENTS_WEBHOOK_SECRET", ""),
+		DodoPaymentsProductID:      getEnv("DODO_PAYMENTS_PRODUCT_ID", ""),
+		DodoPaymentsEnvironment:    getEnv("DODO_PAYMENTS_ENVIRONMENT", "test_mode"),
 	}
 }
 
