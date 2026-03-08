@@ -904,7 +904,7 @@ export default function LandingPage() {
                     For single-location businesses
                   </p>
                   <div className="flex items-baseline gap-1 mb-8">
-                    <AnimatedCounter target={14.99} prefix="$" className="text-5xl font-bold tracking-tight" />
+                    <AnimatedCounter target={19} prefix="$" className="text-5xl font-bold tracking-tight" />
                     <span className="text-muted-foreground">/mo</span>
                   </div>
                   <ul className="space-y-3 mb-8 flex-1">
@@ -959,7 +959,7 @@ export default function LandingPage() {
                     For multi-location businesses
                   </p>
                   <div className="flex items-baseline gap-1 mb-8">
-                    <AnimatedCounter target={24.99} prefix="$" className="text-5xl font-bold tracking-tight text-gradient-brand" />
+                    <AnimatedCounter target={29} prefix="$" className="text-5xl font-bold tracking-tight text-gradient-brand" />
                     <span className="text-muted-foreground">/mo</span>
                   </div>
                   <ul className="space-y-3 mb-8 flex-1">
