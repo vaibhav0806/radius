@@ -6,15 +6,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 type Client struct {
-	apiKey    string
-	fromEmail string
+	apiKey     string
+	fromEmail  string
+	httpClient *http.Client
 }
 
 func NewClient(apiKey, fromEmail string) *Client {
-	return &Client{apiKey: apiKey, fromEmail: fromEmail}
+	return &Client{apiKey: apiKey, fromEmail: fromEmail, httpClient: &http.Client{Timeout: 10 * time.Second}}
 }
 
 type sendRequest struct {
@@ -44,7 +46,7 @@ func (c *Client) Send(ctx context.Context, to, subject, html string) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 
-	resp, err := (&http.Client{}).Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -25,103 +26,61 @@ type reviewStats struct {
 }
 
 func (h *Handler) LocationReviewStats(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
 	locationID := chi.URLParam(r, "id")
 
+	if err := h.verifyLocationOwner(r.Context(), locationID, userID); err != nil {
+		if err == errForbidden {
+			writeError(w, http.StatusForbidden, "forbidden")
+		} else {
+			writeError(w, http.StatusNotFound, "location not found")
+		}
+		return
+	}
+
+	// Query 1: All aggregates in a single query using JSON aggregation
 	var stats reviewStats
+	var sentCount int
+	var ratingDistJSON, sentimentDistJSON []byte
 	err := h.DB.QueryRow(r.Context(),
-		"SELECT COUNT(*), COALESCE(AVG(rating), 0) FROM reviews WHERE location_id = $1",
+		`SELECT
+			COUNT(rv.id) as total_reviews,
+			COALESCE(AVG(rv.rating), 0) as avg_rating,
+			COALESCE((SELECT json_object_agg(rating, cnt) FROM (SELECT rating, COUNT(*) as cnt FROM reviews WHERE location_id = $1 GROUP BY rating) t), '{}')::text,
+			COALESCE((SELECT json_object_agg(sentiment_label, cnt) FROM (SELECT sentiment_label, COUNT(*) as cnt FROM reviews WHERE location_id = $1 AND sentiment_label IS NOT NULL GROUP BY sentiment_label) t), '{}')::text,
+			COUNT(resp.id) FILTER (WHERE resp.status = 'sent') as sent_count,
+			COUNT(resp.id) FILTER (WHERE resp.status = 'draft') as pending_count
+		FROM reviews rv
+		LEFT JOIN responses resp ON resp.review_id = rv.id
+		WHERE rv.location_id = $1`,
 		locationID,
-	).Scan(&stats.TotalReviews, &stats.AvgRating)
+	).Scan(&stats.TotalReviews, &stats.AvgRating, &ratingDistJSON, &sentimentDistJSON, &sentCount, &stats.PendingCount)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
 	stats.RatingDist = map[int]int{}
-	rows, err := h.DB.Query(r.Context(),
-		"SELECT rating, COUNT(*) FROM reviews WHERE location_id = $1 GROUP BY rating",
-		locationID,
-	)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal server error")
-		return
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var rating, count int
-		if err := rows.Scan(&rating, &count); err != nil {
-			writeError(w, http.StatusInternalServerError, "internal server error")
-			return
-		}
-		stats.RatingDist[rating] = count
-	}
-	rows.Close()
-
+	_ = json.Unmarshal(ratingDistJSON, &stats.RatingDist)
 	stats.SentimentDist = map[string]int{}
-	rows, err = h.DB.Query(r.Context(),
-		"SELECT sentiment_label, COUNT(*) FROM reviews WHERE location_id = $1 AND sentiment_label IS NOT NULL GROUP BY sentiment_label",
-		locationID,
-	)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal server error")
-		return
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var label string
-		var count int
-		if err := rows.Scan(&label, &count); err != nil {
-			writeError(w, http.StatusInternalServerError, "internal server error")
-			return
-		}
-		stats.SentimentDist[label] = count
-	}
-	rows.Close()
+	_ = json.Unmarshal(sentimentDistJSON, &stats.SentimentDist)
 
-	var sentCount, totalWithResponse int
-	err = h.DB.QueryRow(r.Context(),
-		`SELECT
-			COUNT(*) FILTER (WHERE r.status = 'sent') as sent_count,
-			COUNT(*) FILTER (WHERE r.status = 'draft') as pending_count,
-			COUNT(r.id) as total_with_response
-		FROM reviews rv LEFT JOIN responses r ON r.review_id = rv.id WHERE rv.location_id = $1`,
-		locationID,
-	).Scan(&sentCount, &stats.PendingCount, &totalWithResponse)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal server error")
-		return
-	}
 	if stats.TotalReviews > 0 {
 		stats.ResponseRate = float64(sentCount) / float64(stats.TotalReviews) * 100
 	}
 
+	// Query 2: Both trends in a single query using UNION ALL
 	stats.SentimentTrend = []trendPoint{}
-	rows, err = h.DB.Query(r.Context(),
-		`SELECT date_trunc('week', review_time)::date as week_start, AVG(sentiment_score), COUNT(*)
-		FROM reviews WHERE location_id = $1 AND sentiment_score IS NOT NULL AND review_time > now() - interval '12 weeks'
-		GROUP BY week_start ORDER BY week_start`,
-		locationID,
-	)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal server error")
-		return
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var tp trendPoint
-		if err := rows.Scan(&tp.Date, &tp.Value, &tp.Count); err != nil {
-			writeError(w, http.StatusInternalServerError, "internal server error")
-			return
-		}
-		stats.SentimentTrend = append(stats.SentimentTrend, tp)
-	}
-	rows.Close()
-
 	stats.RatingTrend = []trendPoint{}
-	rows, err = h.DB.Query(r.Context(),
-		`SELECT date_trunc('week', review_time)::date as week_start, AVG(rating)::float, COUNT(*)
+	rows, err := h.DB.Query(r.Context(),
+		`SELECT 'sentiment' as series, date_trunc('week', review_time)::date::text as week_start, AVG(sentiment_score), COUNT(*)
+		FROM reviews WHERE location_id = $1 AND sentiment_score IS NOT NULL AND review_time > now() - interval '12 weeks'
+		GROUP BY date_trunc('week', review_time)::date
+		UNION ALL
+		SELECT 'rating', date_trunc('week', review_time)::date::text, AVG(rating)::float, COUNT(*)
 		FROM reviews WHERE location_id = $1 AND review_time > now() - interval '12 weeks'
-		GROUP BY week_start ORDER BY week_start`,
+		GROUP BY date_trunc('week', review_time)::date
+		ORDER BY 1, 2`,
 		locationID,
 	)
 	if err != nil {
@@ -130,12 +89,21 @@ func (h *Handler) LocationReviewStats(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 	for rows.Next() {
+		var series string
 		var tp trendPoint
-		if err := rows.Scan(&tp.Date, &tp.Value, &tp.Count); err != nil {
+		if err := rows.Scan(&series, &tp.Date, &tp.Value, &tp.Count); err != nil {
 			writeError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
-		stats.RatingTrend = append(stats.RatingTrend, tp)
+		if series == "sentiment" {
+			stats.SentimentTrend = append(stats.SentimentTrend, tp)
+		} else {
+			stats.RatingTrend = append(stats.RatingTrend, tp)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
 	}
 
 	writeJSON(w, http.StatusOK, stats)

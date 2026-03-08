@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/vaibhav/review-responder/internal/crypto"
 	"github.com/vaibhav/review-responder/internal/google"
 	"github.com/vaibhav/review-responder/internal/middleware"
 	"github.com/vaibhav/review-responder/internal/openai"
@@ -24,7 +25,17 @@ type responseObj struct {
 }
 
 func (h *Handler) GetResponse(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
 	reviewID := chi.URLParam(r, "id")
+
+	if err := h.verifyReviewOwner(r.Context(), reviewID, userID); err != nil {
+		if err == errForbidden {
+			writeError(w, http.StatusForbidden, "forbidden")
+		} else {
+			writeError(w, http.StatusNotFound, "review not found")
+		}
+		return
+	}
 
 	var resp responseObj
 	err := h.DB.QueryRow(r.Context(),
@@ -40,13 +51,27 @@ func (h *Handler) GetResponse(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) RegenerateResponse(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
 	reviewID := chi.URLParam(r, "id")
+
+	if err := h.verifyReviewOwner(r.Context(), reviewID, userID); err != nil {
+		if err == errForbidden {
+			writeError(w, http.StatusForbidden, "forbidden")
+		} else {
+			writeError(w, http.StatusNotFound, "review not found")
+		}
+		return
+	}
 
 	var body struct {
 		Instructions string `json:"instructions"`
 	}
 	if r.Body != nil {
 		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+	if len(body.Instructions) > 1000 {
+		writeError(w, http.StatusBadRequest, "instructions must be 1000 characters or less")
+		return
 	}
 
 	var authorName, reviewText string
@@ -109,13 +134,31 @@ func (h *Handler) RegenerateResponse(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateResponse(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
 	reviewID := chi.URLParam(r, "id")
+
+	if err := h.verifyReviewOwner(r.Context(), reviewID, userID); err != nil {
+		if err == errForbidden {
+			writeError(w, http.StatusForbidden, "forbidden")
+		} else {
+			writeError(w, http.StatusNotFound, "review not found")
+		}
+		return
+	}
 
 	var body struct {
 		DraftText string `json:"draft_text"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.DraftText == "" {
+		writeError(w, http.StatusBadRequest, "draft_text is required")
+		return
+	}
+	if len(body.DraftText) > 5000 {
+		writeError(w, http.StatusBadRequest, "draft_text must be 5000 characters or less")
 		return
 	}
 
@@ -134,11 +177,27 @@ func (h *Handler) UpdateResponse(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ApproveResponse(w http.ResponseWriter, r *http.Request) {
-	reviewID := chi.URLParam(r, "id")
 	userID := middleware.GetUserID(r.Context())
+	reviewID := chi.URLParam(r, "id")
+
+	if err := h.verifyReviewOwner(r.Context(), reviewID, userID); err != nil {
+		if err == errForbidden {
+			writeError(w, http.StatusForbidden, "forbidden")
+		} else {
+			writeError(w, http.StatusNotFound, "review not found")
+		}
+		return
+	}
+
+	tx, err := h.DB.Begin(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	defer tx.Rollback(r.Context())
 
 	var resp responseObj
-	err := h.DB.QueryRow(r.Context(),
+	err = tx.QueryRow(r.Context(),
 		`UPDATE responses SET status = 'approved', final_text = draft_text, approved_at = now(), approved_by_user_id = $1
 		WHERE review_id = $2
 		RETURNING id, review_id, draft_text, final_text, status, generated_at, approved_at, sent_at, approved_by_user_id`,
@@ -149,13 +208,19 @@ func (h *Handler) ApproveResponse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var googleReviewID, googleAccountID, googleLocationID, googleRefreshToken string
-	err = h.DB.QueryRow(r.Context(),
+	var googleReviewID, googleAccountID, googleLocationID, encryptedRefreshToken string
+	err = tx.QueryRow(r.Context(),
 		`SELECT r.google_review_id, l.google_account_id, l.google_location_id, l.google_refresh_token
 		FROM reviews r JOIN locations l ON l.id = r.location_id
 		WHERE r.id = $1`,
 		reviewID,
-	).Scan(&googleReviewID, &googleAccountID, &googleLocationID, &googleRefreshToken)
+	).Scan(&googleReviewID, &googleAccountID, &googleLocationID, &encryptedRefreshToken)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	refreshToken, err := crypto.Decrypt(encryptedRefreshToken, h.Cfg.EncryptionKey)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
@@ -163,14 +228,19 @@ func (h *Handler) ApproveResponse(w http.ResponseWriter, r *http.Request) {
 
 	reviewName := googleAccountID + "/" + googleLocationID + "/reviews/" + googleReviewID
 	oauthCfg := google.OAuthConfig(h.Cfg.GoogleClientID, h.Cfg.GoogleClientSecret, h.Cfg.GoogleRedirectURL)
-	gClient := google.NewClient(r.Context(), oauthCfg, googleRefreshToken)
+	gClient := google.NewClient(r.Context(), oauthCfg, refreshToken)
 
 	if err := gClient.ReplyToReview(r.Context(), reviewName, *resp.FinalText); err != nil {
+		// Google send failed — commit as 'approved' so user can retry
+		if commitErr := tx.Commit(r.Context()); commitErr != nil {
+			writeError(w, http.StatusInternalServerError, "internal server error")
+			return
+		}
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
 
-	err = h.DB.QueryRow(r.Context(),
+	err = tx.QueryRow(r.Context(),
 		`UPDATE responses SET status = 'sent', sent_at = now() WHERE id = $1
 		RETURNING id, review_id, draft_text, final_text, status, generated_at, approved_at, sent_at, approved_by_user_id`,
 		resp.ID,
@@ -180,11 +250,26 @@ func (h *Handler) ApproveResponse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
 	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) SkipResponse(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
 	reviewID := chi.URLParam(r, "id")
+
+	if err := h.verifyReviewOwner(r.Context(), reviewID, userID); err != nil {
+		if err == errForbidden {
+			writeError(w, http.StatusForbidden, "forbidden")
+		} else {
+			writeError(w, http.StatusNotFound, "review not found")
+		}
+		return
+	}
 
 	var resp responseObj
 	err := h.DB.QueryRow(r.Context(),

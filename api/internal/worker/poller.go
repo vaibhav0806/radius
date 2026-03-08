@@ -3,14 +3,18 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
+	"runtime/debug"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/oauth2"
 
 	"github.com/vaibhav/review-responder/internal/config"
+	"github.com/vaibhav/review-responder/internal/crypto"
 	"github.com/vaibhav/review-responder/internal/email"
 	"github.com/vaibhav/review-responder/internal/google"
 	"github.com/vaibhav/review-responder/internal/openai"
@@ -21,6 +25,7 @@ type Poller struct {
 	cfg    *config.Config
 	openai *openai.Client
 	email  *email.Client
+	wg     sync.WaitGroup
 }
 
 func NewPoller(db *pgxpool.Pool, cfg *config.Config) *Poller {
@@ -38,10 +43,13 @@ func NewPoller(db *pgxpool.Pool, cfg *config.Config) *Poller {
 }
 
 func (p *Poller) Start(ctx context.Context) {
+	p.wg.Add(1)
+	defer p.wg.Done()
+
 	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
 
-	p.pollAll(ctx)
+	p.safePollAll(ctx)
 
 	for {
 		select {
@@ -49,9 +57,22 @@ func (p *Poller) Start(ctx context.Context) {
 			log.Println("review poller stopped")
 			return
 		case <-ticker.C:
-			p.pollAll(ctx)
+			p.safePollAll(ctx)
 		}
 	}
+}
+
+func (p *Poller) Wait() {
+	p.wg.Wait()
+}
+
+func (p *Poller) safePollAll(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("poller: panic recovered: %v\n%s", r, debug.Stack())
+		}
+	}()
+	p.pollAll(ctx)
 }
 
 type pollableLocation struct {
@@ -101,7 +122,11 @@ func (p *Poller) pollAll(ctx context.Context) {
 }
 
 func (p *Poller) pollLocation(ctx context.Context, oauthCfg *oauth2.Config, loc pollableLocation) (int, error) {
-	client := google.NewClient(ctx, oauthCfg, loc.GoogleRefreshToken)
+	refreshToken, err := crypto.Decrypt(loc.GoogleRefreshToken, p.cfg.EncryptionKey)
+	if err != nil {
+		return 0, fmt.Errorf("failed to decrypt refresh token: %w", err)
+	}
+	client := google.NewClient(ctx, oauthCfg, refreshToken)
 
 	locationID := strings.TrimPrefix(loc.GoogleLocationID, "locations/")
 	reviews, _, err := client.ListReviews(ctx, loc.GoogleAccountID, locationID, 50, "")

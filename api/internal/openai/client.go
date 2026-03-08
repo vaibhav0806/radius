@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 type Client struct {
@@ -15,7 +16,7 @@ type Client struct {
 }
 
 func NewClient(apiKey string) *Client {
-	return &Client{apiKey: apiKey, httpClient: &http.Client{}}
+	return &Client{apiKey: apiKey, httpClient: &http.Client{Timeout: 30 * time.Second}}
 }
 
 type ChatMessage struct {

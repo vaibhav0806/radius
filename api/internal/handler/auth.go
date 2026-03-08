@@ -30,8 +30,9 @@ type authUser struct {
 }
 
 type authResponse struct {
-	Token string   `json:"token"`
-	User  authUser `json:"user"`
+	AccessToken  string   `json:"access_token"`
+	RefreshToken string   `json:"refresh_token"`
+	User         authUser `json:"user"`
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
@@ -45,12 +46,22 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "email, password, and name are required")
 		return
 	}
-	if !strings.Contains(req.Email, "@") {
+	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
+	req.Name = strings.TrimSpace(req.Name)
+	if !strings.Contains(req.Email, "@") || len(req.Email) > 254 {
 		writeError(w, http.StatusBadRequest, "invalid email")
+		return
+	}
+	if len(req.Name) > 200 {
+		writeError(w, http.StatusBadRequest, "name must be 200 characters or less")
 		return
 	}
 	if len(req.Password) < 8 {
 		writeError(w, http.StatusBadRequest, "password must be at least 8 characters")
+		return
+	}
+	if len(req.Password) > 128 {
+		writeError(w, http.StatusBadRequest, "password must be 128 characters or less")
 		return
 	}
 
@@ -76,13 +87,13 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := auth.GenerateToken(user.ID, h.Cfg.JWTSecret)
+	tokens, err := auth.GenerateTokenPair(user.ID, h.Cfg.JWTSecret)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, authResponse{Token: token, User: user})
+	writeJSON(w, http.StatusCreated, authResponse{AccessToken: tokens.AccessToken, RefreshToken: tokens.RefreshToken, User: user})
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -113,11 +124,38 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := auth.GenerateToken(user.ID, h.Cfg.JWTSecret)
+	tokens, err := auth.GenerateTokenPair(user.ID, h.Cfg.JWTSecret)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, authResponse{Token: token, User: user})
+	writeJSON(w, http.StatusOK, authResponse{AccessToken: tokens.AccessToken, RefreshToken: tokens.RefreshToken, User: user})
+}
+
+func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.RefreshToken == "" {
+		writeError(w, http.StatusBadRequest, "refresh_token is required")
+		return
+	}
+
+	userID, err := auth.ValidateRefreshToken(body.RefreshToken, h.Cfg.JWTSecret)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "invalid refresh token")
+		return
+	}
+
+	tokens, err := auth.GenerateTokenPair(userID, h.Cfg.JWTSecret)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"access_token":  tokens.AccessToken,
+		"refresh_token": tokens.RefreshToken,
+	})
 }

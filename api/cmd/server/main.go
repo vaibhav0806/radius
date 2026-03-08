@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/go-chi/httprate"
 	"github.com/vaibhav/review-responder/internal/config"
 	"github.com/vaibhav/review-responder/internal/db"
 	"github.com/vaibhav/review-responder/internal/handler"
@@ -20,7 +21,10 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("invalid config: %v", err)
+	}
 
 	ctx := context.Background()
 	pool, err := db.Connect(ctx, cfg.DatabaseURL)
@@ -41,7 +45,9 @@ func main() {
 	r.Use(chimw.RequestID)
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Logger)
-	r.Use(chimw.Recoverer)
+	r.Use(middleware.Recoverer)
+	r.Use(middleware.SecurityHeaders)
+	r.Use(middleware.MaxBodySize(1 << 20)) // 1MB
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{cfg.BaseURL},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -53,8 +59,12 @@ func main() {
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/health", h.HealthCheck)
 
-		r.Post("/auth/register", h.Register)
-		r.Post("/auth/login", h.Login)
+		r.Group(func(r chi.Router) {
+			r.Use(httprate.LimitByIP(10, time.Minute))
+			r.Post("/auth/register", h.Register)
+			r.Post("/auth/login", h.Login)
+			r.Post("/auth/refresh", h.RefreshToken)
+		})
 
 		r.Get("/google/callback", h.GoogleCallback)
 		r.Post("/billing/webhook", h.BillingWebhook)
@@ -109,6 +119,8 @@ func main() {
 
 	log.Println("shutting down server...")
 	pollerCancel()
+	poller.Wait()
+	log.Println("poller stopped")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {

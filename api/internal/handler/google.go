@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"log"
@@ -9,9 +11,45 @@ import (
 
 	"golang.org/x/oauth2"
 
+	"github.com/vaibhav/review-responder/internal/crypto"
 	"github.com/vaibhav/review-responder/internal/google"
 	"github.com/vaibhav/review-responder/internal/middleware"
 )
+
+func (h *Handler) signState(payload string) string {
+	mac := hmac.New(sha256.New, []byte(h.Cfg.JWTSecret))
+	mac.Write([]byte(payload))
+	sig := base64.URLEncoding.EncodeToString(mac.Sum(nil))
+	encoded := base64.URLEncoding.EncodeToString([]byte(payload))
+	return encoded + "." + sig
+}
+
+func (h *Handler) verifyState(state string) (string, string, error) {
+	parts := strings.SplitN(state, ".", 2)
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid state format")
+	}
+
+	payload, err := base64.URLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return "", "", fmt.Errorf("invalid state encoding")
+	}
+
+	mac := hmac.New(sha256.New, []byte(h.Cfg.JWTSecret))
+	mac.Write(payload)
+	expectedSig := base64.URLEncoding.EncodeToString(mac.Sum(nil))
+
+	if !hmac.Equal([]byte(parts[1]), []byte(expectedSig)) {
+		return "", "", fmt.Errorf("invalid state signature")
+	}
+
+	idParts := strings.SplitN(string(payload), ":", 2)
+	if len(idParts) != 2 {
+		return "", "", fmt.Errorf("invalid state payload")
+	}
+
+	return idParts[0], idParts[1], nil
+}
 
 func (h *Handler) GoogleAuth(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
@@ -33,7 +71,7 @@ func (h *Handler) GoogleAuth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cfg := google.OAuthConfig(h.Cfg.GoogleClientID, h.Cfg.GoogleClientSecret, h.Cfg.GoogleRedirectURL)
-	state := base64.URLEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", userID, businessID)))
+	state := h.signState(fmt.Sprintf("%s:%s", userID, businessID))
 	url := cfg.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", "consent"))
 
 	writeJSON(w, http.StatusOK, map[string]string{"url": url})
@@ -47,17 +85,11 @@ func (h *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stateBytes, err := base64.URLEncoding.DecodeString(stateParam)
+	userID, businessID, err := h.verifyState(stateParam)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid state")
 		return
 	}
-	parts := strings.SplitN(string(stateBytes), ":", 2)
-	if len(parts) != 2 {
-		writeError(w, http.StatusBadRequest, "invalid state")
-		return
-	}
-	userID, businessID := parts[0], parts[1]
 
 	var ownerID string
 	err = h.DB.QueryRow(r.Context(), "SELECT owner_user_id FROM businesses WHERE id = $1", businessID).Scan(&ownerID)
@@ -83,6 +115,13 @@ func (h *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	encryptedToken, err := crypto.Encrypt(token.RefreshToken, h.Cfg.EncryptionKey)
+	if err != nil {
+		log.Printf("failed to encrypt refresh token: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
 	for _, account := range accounts {
 		locations, err := client.ListLocations(r.Context(), account.Name)
 		if err != nil {
@@ -96,7 +135,7 @@ func (h *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 				`INSERT INTO locations (business_id, name, address, google_account_id, google_location_id, google_refresh_token, poll_enabled)
 				VALUES ($1, $2, $3, $4, $5, $6, true)
 				ON CONFLICT (google_location_id) DO UPDATE SET google_refresh_token = $6, poll_enabled = true`,
-				businessID, loc.Title, address, account.Name, loc.Name, token.RefreshToken,
+				businessID, loc.Title, address, account.Name, loc.Name, encryptedToken,
 			)
 			if err != nil {
 				log.Printf("failed to upsert location %s: %v", loc.Name, err)

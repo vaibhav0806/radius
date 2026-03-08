@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 type Client struct {
@@ -20,7 +21,7 @@ func NewClient(apiKey, environment string) *Client {
 	if environment == "live_mode" {
 		baseURL = "https://live.dodopayments.com"
 	}
-	return &Client{apiKey: apiKey, baseURL: baseURL, httpClient: &http.Client{}}
+	return &Client{apiKey: apiKey, baseURL: baseURL, httpClient: &http.Client{Timeout: 30 * time.Second}}
 }
 
 type CheckoutSession struct {

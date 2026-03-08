@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/vaibhav/review-responder/internal/middleware"
 )
 
 type review struct {
@@ -23,7 +24,17 @@ type review struct {
 }
 
 func (h *Handler) ListReviews(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
 	locationID := chi.URLParam(r, "id")
+
+	if err := h.verifyLocationOwner(r.Context(), locationID, userID); err != nil {
+		if err == errForbidden {
+			writeError(w, http.StatusForbidden, "forbidden")
+		} else {
+			writeError(w, http.StatusNotFound, "location not found")
+		}
+		return
+	}
 
 	limit := 50
 	if v := r.URL.Query().Get("limit"); v != "" {

@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -59,12 +60,23 @@ func (h *Handler) CreateBusiness(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	req.Name = strings.TrimSpace(req.Name)
+	req.Type = strings.TrimSpace(req.Type)
 	if req.Name == "" {
 		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
+	if len(req.Name) > 200 {
+		writeError(w, http.StatusBadRequest, "name must be 200 characters or less")
+		return
+	}
 	if req.Type == "" {
 		req.Type = "other"
+	}
+	validTypes := map[string]bool{"restaurant": true, "retail": true, "service": true, "healthcare": true, "hospitality": true, "other": true}
+	if !validTypes[req.Type] {
+		writeError(w, http.StatusBadRequest, "invalid business type")
+		return
 	}
 
 	var b business

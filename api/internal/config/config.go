@@ -1,6 +1,10 @@
 package config
 
-import "os"
+import (
+	"fmt"
+	"os"
+	"strings"
+)
 
 type Config struct {
 	DatabaseURL        string
@@ -17,10 +21,11 @@ type Config struct {
 	DodoPaymentsWebhookSecret string
 	DodoPaymentsProductID      string
 	DodoPaymentsEnvironment    string
+	EncryptionKey              string
 }
 
-func Load() *Config {
-	return &Config{
+func Load() (*Config, error) {
+	cfg := &Config{
 		DatabaseURL:        getEnv("DATABASE_URL", "postgres://localhost:5432/review_responder?sslmode=disable"),
 		OpenAIAPIKey:       getEnv("OPENAI_API_KEY", ""),
 		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
@@ -35,7 +40,37 @@ func Load() *Config {
 		DodoPaymentsWebhookSecret: getEnv("DODO_PAYMENTS_WEBHOOK_SECRET", ""),
 		DodoPaymentsProductID:      getEnv("DODO_PAYMENTS_PRODUCT_ID", ""),
 		DodoPaymentsEnvironment:    getEnv("DODO_PAYMENTS_ENVIRONMENT", "test_mode"),
+		EncryptionKey:              getEnv("ENCRYPTION_KEY", ""),
 	}
+
+	var errs []string
+	if cfg.JWTSecret == "dev-secret-change-me" || cfg.JWTSecret == "" {
+		errs = append(errs, "JWT_SECRET must be set to a secure value (not the default)")
+	}
+	if cfg.EncryptionKey == "" {
+		errs = append(errs, "ENCRYPTION_KEY must be set (32-byte hex-encoded key for AES-256)")
+	}
+	if cfg.GoogleClientID == "" || cfg.GoogleClientSecret == "" {
+		errs = append(errs, "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set")
+	}
+	if cfg.OpenAIAPIKey == "" {
+		errs = append(errs, "OPENAI_API_KEY must be set")
+	}
+	if cfg.DodoPaymentsAPIKey == "" {
+		errs = append(errs, "DODO_PAYMENTS_API_KEY must be set")
+	}
+	if cfg.DodoPaymentsWebhookSecret == "" {
+		errs = append(errs, "DODO_PAYMENTS_WEBHOOK_SECRET must be set")
+	}
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("config validation failed:\n  - %s", joinErrors(errs))
+	}
+
+	return cfg, nil
+}
+
+func joinErrors(errs []string) string {
+	return strings.Join(errs, "\n  - ")
 }
 
 func getEnv(key, fallback string) string {
