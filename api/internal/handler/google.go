@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 
+	"golang.org/x/oauth2"
+
 	"github.com/vaibhav/review-responder/internal/google"
 	"github.com/vaibhav/review-responder/internal/middleware"
 )
@@ -32,7 +34,7 @@ func (h *Handler) GoogleAuth(w http.ResponseWriter, r *http.Request) {
 
 	cfg := google.OAuthConfig(h.Cfg.GoogleClientID, h.Cfg.GoogleClientSecret, h.Cfg.GoogleRedirectURL)
 	state := base64.URLEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", userID, businessID)))
-	url := cfg.AuthCodeURL(state)
+	url := cfg.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", "consent"))
 
 	writeJSON(w, http.StatusOK, map[string]string{"url": url})
 }
