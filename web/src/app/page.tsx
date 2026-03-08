@@ -383,7 +383,7 @@ export default function LandingPage() {
                     <div className="size-2.5 rounded-full bg-green-400/60" />
                   </div>
                   <div className="flex-1 flex justify-center">
-                    <div className="rounded-md bg-muted px-4 py-0.5 text-[11px] text-muted-foreground">rivo.app/dashboard</div>
+                    <div className="rounded-md bg-muted px-4 py-0.5 text-[11px] text-muted-foreground">tryradius.app/dashboard</div>
                   </div>
                 </div>
 
