@@ -1,6 +1,6 @@
-# ReviewFlow
+# Radius
 
-AI-powered review management for local businesses. Monitor Google reviews, get instant on-brand response drafts, track sentiment, and publish replies -- all from one dashboard.
+Local business presence platform — reviews, visibility, and growth. Monitor Google reviews, get instant on-brand response drafts, track sentiment, and publish replies — all from one dashboard.
 
 ## How It Works
 
@@ -39,8 +39,8 @@ Negative reviews (1-2 stars) trigger instant email alerts.
 ### 1. Clone and install dependencies
 
 ```bash
-git clone git@github.com:vaibhav0806/local-review-responder.git
-cd local-review-responder
+git clone git@github.com:vaibhav0806/radius.git
+cd radius
 
 # Backend
 cd api
