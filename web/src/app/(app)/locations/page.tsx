@@ -197,7 +197,7 @@ export default function LocationsPage() {
             <MapPin className="size-7 text-brand" />
           </div>
           <h2 className="text-xl font-semibold mb-2">No locations yet</h2>
-          <p className="text-muted-foreground mb-6">
+          <p className="text-muted-foreground mb-6 text-center px-4">
             Connect your Google Business Profile to get started
           </p>
           <Button onClick={handleConnect} disabled={connecting} className="rounded-full btn-shimmer">

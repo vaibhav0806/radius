@@ -330,7 +330,7 @@ export default function DashboardPage() {
             <MapPin className="size-7 text-brand" />
           </div>
           <h2 className="text-xl font-semibold mb-2">Connect your first location</h2>
-          <p className="text-muted-foreground mb-6">
+          <p className="text-muted-foreground mb-6 text-center px-4">
             Start monitoring reviews by connecting your Google Business Profile
           </p>
           <Link className={cn(buttonVariants(), "rounded-full btn-shimmer")} href="/locations">
