@@ -22,7 +22,7 @@ Negative reviews (1-2 stars) trigger instant email alerts.
 | AI | OpenAI API (GPT-4o for drafting, GPT-4o-mini for sentiment) |
 | Reviews | Google Business Profile API |
 | Email | Resend |
-| Payments | Stripe |
+| Payments | Dodo Payments |
 
 ## Prerequisites
 
@@ -32,7 +32,7 @@ Negative reviews (1-2 stars) trigger instant email alerts.
 - OpenAI API key
 - Google Cloud project with Business Profile API enabled
 - (Optional) Resend API key for email alerts
-- (Optional) Stripe keys for billing
+- (Optional) Dodo Payments API key for billing
 
 ## Setup
 
@@ -83,9 +83,9 @@ PORT=8080
 # Optional
 RESEND_API_KEY=re_...
 NOTIFICATION_FROM_EMAIL=notifications@yourdomain.com
-STRIPE_SECRET_KEY=sk_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-STRIPE_PRICE_ID=price_...
+DODO_PAYMENTS_API_KEY=...
+DODO_PAYMENTS_WEBHOOK_SECRET=whsec_...
+DODO_PAYMENTS_PRODUCT_ID=pdt_...
 ```
 
 For the frontend, create `web/.env.local`:
@@ -123,7 +123,7 @@ api/                              Go backend
   cmd/server/main.go              Entrypoint, router, worker startup
   internal/
     auth/                         JWT utilities
-    billing/                      Stripe API client + webhook verification
+    billing/                      Dodo Payments API client + webhook verification
     config/                       Environment config
     db/                           PostgreSQL connection pool
     email/                        Resend client + email templates
@@ -200,12 +200,14 @@ POST   /api/billing/cancel
 2. Set `NEXT_PUBLIC_API_URL` to your backend URL
 3. Build command: `npm run build`, start command: `npm start`
 
-### Stripe Webhooks
+### Dodo Payments Webhooks
 
-Set the webhook endpoint to `https://your-api-domain.com/api/billing/webhook` and listen for:
-- `checkout.session.completed`
-- `customer.subscription.updated`
-- `customer.subscription.deleted`
+In the Dodo Payments dashboard, create a webhook pointing to `https://your-api-domain.com/api/billing/webhook` and subscribe to:
+- `subscription.active`
+- `subscription.cancelled`
+- `subscription.failed`
+- `subscription.expired`
+- `payment.succeeded`
 
 ## License
 

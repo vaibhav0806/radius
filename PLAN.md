@@ -214,10 +214,11 @@ Protected (JWT required):
 ### Phase 5 - Polish & Launch (Week 6) -- DONE
 - [x] Landing page: hero, features, how-it-works, pricing ($29/$59), footer
 - [x] Landing page: dynamic CTA (logged in -> "Go to Dashboard", logged out -> "Get Started Free")
-- [x] Stripe billing: direct HTTP client (no SDK), checkout sessions, subscription management
-- [x] Stripe webhook: signature verification, handles checkout.session.completed / subscription.updated / subscription.deleted
+- [x] ~Stripe billing~ -> Replaced with Dodo Payments
+- [x] Dodo Payments: checkout sessions (POST /checkouts), subscription management (GET/PATCH /subscriptions)
+- [x] Dodo webhook: Standard Webhooks signature verification (HMAC SHA256)
 - [x] Billing endpoints: POST /api/billing/checkout, GET /api/billing/status, POST /api/billing/cancel, POST /api/billing/webhook
-- [x] Migration 000006: adds stripe_customer_id, stripe_subscription_id, subscription_status, subscription_plan to businesses
+- [x] Migration 000006: adds dodo_customer_id, dodo_subscription_id, subscription_status, subscription_plan to businesses
 - [x] Onboarding flow: 3-step (create business -> connect Google -> brand voice) with progress bar
 - [x] Register redirects to /onboarding
 - [x] Settings page: billing card with upgrade/cancel, handles ?billing=success and ?billing=cancel
@@ -237,7 +238,7 @@ Protected (JWT required):
 | AI          | OpenAI API (GPT-4o)             |
 | Reviews     | Google Business Profile API      |
 | Email       | Resend                           |
-| Payments    | Stripe                           |
+| Payments    | Dodo Payments                    |
 | Hosting     | Railway (API + DB), Vercel or Railway (frontend) |
 
 ## Key Risks & Mitigations
@@ -286,8 +287,8 @@ Protected (JWT required):
         resend.go                   -- Resend API client
         templates.go                -- Email templates (negative review alert)
       /billing/
-        stripe.go                   -- Stripe API client (checkout, subscriptions)
-        webhook.go                  -- Webhook signature verification
+        dodo.go                     -- Dodo Payments API client (checkout, subscriptions)
+        webhook.go                  -- Standard Webhooks signature verification
       /worker/poller.go             -- Review polling + auto sentiment/draft + email alerts
     /migrations/                    -- 6 up/down SQL migration pairs
     /queries/queries.sql            -- sqlc query definitions
