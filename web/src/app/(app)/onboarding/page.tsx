@@ -2,12 +2,32 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Check, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { fetchAPI } from "@/lib/api";
+
+const steps = [
+  { label: "Business", value: 1 },
+  { label: "Google", value: 2 },
+  { label: "Brand Voice", value: 3 },
+];
+
+const stepTitles: Record<number, string> = {
+  1: "Create your business",
+  2: "Connect Google",
+  3: "Set your brand voice",
+};
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -43,7 +63,7 @@ export default function OnboardingPage() {
     }
   }
 
-  async function handleConnect() {
+  async function handleConnectGoogle() {
     if (!businessId) return;
     try {
       setConnecting(true);
@@ -80,123 +100,171 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-8 py-12">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Set up your account
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Step {step} of 3
-        </p>
-      </div>
-
-      <div className="h-2 overflow-hidden rounded-full bg-muted">
-        <div
-          className="h-full rounded-full bg-primary transition-all duration-300"
-          style={{ width: `${(step / 3) * 100}%` }}
-        />
-      </div>
-
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      {step === 1 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Create your business</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form className="space-y-4" onSubmit={handleCreateBusiness}>
-              <div className="space-y-2">
-                <Label htmlFor="biz-name">Business Name</Label>
-                <Input
-                  id="biz-name"
-                  type="text"
-                  placeholder="My Business"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="biz-type">Business Type</Label>
-                <select
-                  id="biz-type"
-                  value={type}
-                  onChange={(e) => setType(e.target.value)}
-                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                >
-                  <option value="restaurant">Restaurant</option>
-                  <option value="clinic">Clinic</option>
-                  <option value="salon">Salon</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              <Button className="w-full" disabled={creating}>
-                {creating ? "Creating..." : "Continue"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      )}
-
-      {step === 2 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Connect Google Business Profile</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Link your Google Business Profile so we can monitor your reviews
-              automatically.
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="w-full max-w-lg space-y-8 animate-fade-in-up">
+        {/* Logo + heading */}
+        <div className="space-y-3">
+          <span className="text-xl font-extrabold tracking-[-0.02em] font-logo text-foreground">radius</span>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+              Set up your account
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Step {step} of 3 &mdash; {stepTitles[step]}
             </p>
-            <Button className="w-full" onClick={handleConnect} disabled={connecting}>
-              {connecting ? "Connecting..." : "Connect Google Business Profile"}
-            </Button>
-            <button
-              type="button"
-              onClick={() => setStep(3)}
-              className="block w-full text-center text-sm text-muted-foreground hover:text-foreground"
-            >
-              I&apos;ll do this later
-            </button>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+        </div>
 
-      {step === 3 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Set your brand voice</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form className="space-y-4" onSubmit={handleSaveVoice}>
-              <div className="space-y-2">
-                <Label htmlFor="tone">Tone</Label>
-                <Textarea
-                  id="tone"
-                  placeholder="e.g., Warm and friendly, professional but not stuffy"
-                  value={tone}
-                  onChange={(e) => setTone(e.target.value)}
-                  rows={2}
-                />
+        {/* Visual stepper */}
+        <div className="flex items-center justify-between">
+          {steps.map((s, i) => (
+            <div key={s.value} className="flex flex-1 items-center">
+              <div className="flex flex-col items-center gap-1.5">
+                <div
+                  className={`flex size-9 items-center justify-center rounded-full text-sm font-medium transition-colors ${
+                    step > s.value
+                      ? "bg-brand text-white"
+                      : step === s.value
+                        ? "bg-brand/10 text-brand ring-2 ring-brand"
+                        : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {step > s.value ? (
+                    <Check className="size-4" />
+                  ) : (
+                    s.value
+                  )}
+                </div>
+                <span className="text-xs font-medium text-muted-foreground">
+                  {s.label}
+                </span>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="context">Business Context</Label>
-                <Textarea
-                  id="context"
-                  placeholder="e.g., Family-owned Italian restaurant since 1985. Known for handmade pasta."
-                  value={businessContext}
-                  onChange={(e) => setBusinessContext(e.target.value)}
-                  rows={3}
+              {i < steps.length - 1 && (
+                <div
+                  className={`mx-2 mb-5 h-0.5 flex-1 rounded-full transition-colors ${
+                    step > s.value ? "bg-brand" : "bg-border"
+                  }`}
                 />
-              </div>
-              <Button className="w-full" disabled={savingVoice}>
-                {savingVoice ? "Saving..." : "Complete Setup"}
+              )}
+            </div>
+          ))}
+        </div>
+
+        {error && (
+          <p className="flex items-center gap-1.5 text-sm text-destructive">
+            <AlertCircle className="size-4 shrink-0" />
+            {error}
+          </p>
+        )}
+
+        {step === 1 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Create your business</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form className="space-y-5" onSubmit={handleCreateBusiness}>
+                <div className="space-y-2">
+                  <Label htmlFor="biz-name">Business Name</Label>
+                  <Input
+                    id="biz-name"
+                    type="text"
+                    placeholder="My Business"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Business Type</Label>
+                  <Select value={type} onValueChange={(v) => { if (v) setType(v); }}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select a type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="restaurant">Restaurant</SelectItem>
+                      <SelectItem value="clinic">Clinic</SelectItem>
+                      <SelectItem value="salon">Salon</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button className="w-full rounded-xl" size="lg" disabled={creating}>
+                  {creating ? "Creating..." : "Create Business"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        )}
+
+        {step === 2 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Connect Google Business Profile</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Link your Google Business Profile so we can monitor your reviews
+                automatically.
+              </p>
+              <Button
+                className="w-full rounded-xl"
+                size="lg"
+                onClick={handleConnectGoogle}
+                disabled={connecting}
+              >
+                {connecting
+                  ? "Connecting..."
+                  : "Connect Google Business Profile"}
               </Button>
-            </form>
-          </CardContent>
-        </Card>
-      )}
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full rounded-xl"
+                size="lg"
+                onClick={() => setStep(3)}
+              >
+                I&apos;ll do this later
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {step === 3 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Set your brand voice</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form className="space-y-5" onSubmit={handleSaveVoice}>
+                <div className="space-y-2">
+                  <Label htmlFor="tone">Tone</Label>
+                  <Textarea
+                    id="tone"
+                    placeholder="e.g., Warm and friendly, professional but not stuffy"
+                    value={tone}
+                    onChange={(e) => setTone(e.target.value)}
+                    rows={2}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="context">Business Context</Label>
+                  <Textarea
+                    id="context"
+                    placeholder="e.g., Family-owned Italian restaurant since 1985. Known for handmade pasta."
+                    value={businessContext}
+                    onChange={(e) => setBusinessContext(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+                <Button className="w-full rounded-xl" size="lg" disabled={savingVoice}>
+                  {savingVoice ? "Saving..." : "Complete Setup"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }
